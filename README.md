@@ -1,5 +1,5 @@
 # XGeneration
-## The AI Composition package for Humming Tacos
+## The AI Composition Package for Humming Tacos
 
 Only for model inference. The training and preprocessing scripts are removed. 
 
@@ -17,8 +17,6 @@ Generate simple chord for the melody from task1, output lead sheet (melody + cho
 
 ### Task3: Accompaniment Generation
 
-Generate Chinese pop style piano accompaniment based on the lead sheet.
+Generate Chinese pop style piano accompaniment based on given lead sheet.
 
 Download the pretrained model [here](https://drive.google.com/file/d/1HUkbbk9qkvDocYWmdK5Zq6vUkcKympGW/view?usp=sharing).
-
-Please refer to https://github.com/Xuening0322/Accompaniment-Generation for the complete version. 
