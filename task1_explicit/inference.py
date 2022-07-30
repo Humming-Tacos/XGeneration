@@ -206,7 +206,7 @@ def load_vae():
     vae_model = SketchVAE(
         vae_input_dims, vae_pitch_dims, vae_rhythm_dims, vae_hidden_dims,
         vae_zp_dims, vae_zr_dims, vae_seq_len, vae_beat_num, vae_tick_num, 4000)
-    dic = torch.load("XGeneration/task1_explicit/model_backup/sketchvae.pt")
+    dic = torch.load("/root/task1_explicit/model_backup/sketchvae-pop909.pt")
 
     for name in list(dic.keys()):
         dic[name.replace('module.', '')] = dic.pop(name)
@@ -231,8 +231,7 @@ def load_model_a4(vae_model, inpaint_len, total_len):
         inpaint_len, total_len,
         vae_model, True
     )
-    dic = torch.load("XGeneration/task1_explicit/model_backup/sketchNet-stage"
-                     "-1_4_measure.pt")
+    dic = torch.load('/root/task1_explicit/model_backup/sketchNet-stage-1-pop909-4-measure.pt')
     for name in list(dic.keys()):
         dic[name.replace('module.', '')] = dic.pop(name)
     model.load_state_dict(dic)
@@ -255,8 +254,7 @@ def load_model_b4(vae_model, inpaint_len, total_len):
         inpaint_len, total_len,
         vae_model, True
     )
-    dic = torch.load('XGeneration/task1_explicit/model_backup/sketchNet-stage'
-                     '-1_12_measure.pt')
+    dic = torch.load('/root/task1_explicit/model_backup/sketchNet-stage-1-pop909-12-measure.pt')
     for name in list(dic.keys()):
         dic[name.replace('module.', '')] = dic.pop(name)
     model.load_state_dict(dic)
@@ -271,6 +269,7 @@ def load_model_b4(vae_model, inpaint_len, total_len):
 
 
 def model_eval(model, inference_data, n_past, n_future, n_inpaint):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     output = []
     v_mean_loss = 0.0
     v_mean_acc = 0.0
@@ -325,8 +324,7 @@ def change_tempo(midi):
 
 
 def inference(midi_path):
-    global device
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(torch.cuda.is_available())
     res = []
     change_tempo(midi_path)
     process_note_time(midi_path)
@@ -372,7 +370,7 @@ def inference(midi_path):
     data = {'notes': res}
     m = MIDI_Render("Irish", minStep=min_step)
     time = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_path = "temporary/inpaint_" + time + ".mid"
+    output_path = "/root/temporary/inpaint_" + time + ".mid"
     m.data2midi(data, output=output_path)
 
     msg_list = []
@@ -389,7 +387,10 @@ def inference(midi_path):
     # combined length: 16 bars in total
     for msg in msg_list[:-2]:
         original_mid.tracks[1].append(msg)
-    save = "temporary/demo_" + time + ".mid"
-    original_mid.save(save)
-    return save
+    original_mid.save("/root/temporary/demo_" + time + ".mid")
+    return "/root/temporary/demo_" + time + ".mid"
 
+
+if __name__ == '__main__':
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    inference('/root/task1_explicit/mjve_tone_basic_pitch1_preprocessed.mid')
