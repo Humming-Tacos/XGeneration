@@ -68,7 +68,6 @@ def clamp_midi_data(input_midi_data):
 
 
 def quantize_midi_data(input_midi_data: pretty_midi.PrettyMIDI):
-    starts = input_midi_data.get_onsets()
     tempo = input_midi_data.get_tempo_changes()[1][0]
 
     def quantize(time):
@@ -79,8 +78,6 @@ def quantize_midi_data(input_midi_data: pretty_midi.PrettyMIDI):
 
         return new_time
 
-    # get ends:
-    ends = [note.end for note in input_midi_data.instruments[0].notes]
     delete_notes_index = []
 
     for i, note in enumerate(input_midi_data.instruments[0].notes):
@@ -93,7 +90,7 @@ def quantize_midi_data(input_midi_data: pretty_midi.PrettyMIDI):
                     delete_notes_index.append(i - 1)
                 else:
                     delete_notes_index.append(i)
-            elif note.start >= input_midi_data.instruments[0].notes[i - 1].start and note.start < \
+            elif input_midi_data.instruments[0].notes[i - 1].start <= note.start < \
                     input_midi_data.instruments[0].notes[i - 1].end:
                 input_midi_data.instruments[0].notes[i - 1].end = note.start
 
@@ -107,11 +104,10 @@ def _print_notes(input_midi_data):
         print(note)
 
 
-def preprocess(input_midi_path):
+def preprocess(input_midi_path, output_midi_path):
     input_midi_data = pretty_midi.PrettyMIDI(input_midi_path)
     clamp_midi_data(input_midi_data)
     quantize_midi_data(input_midi_data)
-    output_midi_path = input_midi_path
     input_midi_data.write(output_midi_path)
     return output_midi_path
 
@@ -159,7 +155,8 @@ def adjust_chord(input_path, output_path):
                     pitch = []
                     for k in pre:
                         pitch.append(k[2])
-                    pitch.remove(nn[j][2])
+                    if nn[j][2] in pitch:
+                        pitch.remove(nn[j][2])
                     for p in pitch:
                         nn.append([nn[j][0], nn[j][0] + min_duration, p, 90])
         if time_d[i] == 2:
@@ -170,8 +167,10 @@ def adjust_chord(input_path, output_path):
                     pitch = []
                     for k in pre:
                         pitch.append(k[2])
-                    pitch.remove(nn[j][2])
-                    pitch.remove(nn[j + 1][2])
+                    if nn[j][2] in pitch:
+                        pitch.remove(nn[j][2])
+                    if nn[j + 1][2] in pitch:
+                        pitch.remove(nn[j + 1][2])
                     for p in pitch:
                         nn.append([nn[j][0], nn[j][0] + min_duration, p, 90])
                     break
@@ -255,12 +254,10 @@ def export_music(score, chord_list, gap_list, filename, midi_tempo):
                 new_track.append(msg)
 
     new_mid.tracks.insert(1, new_track)
-    # new_mid_path = OUTPUTS_PATH + '/' + filename + '_all.mid'
     new_mid_path = '/root/temporary/' + filename + '_all.mid'
     new_mid.save(new_mid_path)
-
-    preprocess(new_mid_path)
-    # adjust_chord(new_mid_path, OUTPUTS_PATH + '/' + filename + '_all_adjusted.mid')
+    save_path = os.path.split(new_mid_path)[0] + '/preprocessed_' + os.path.split(new_mid_path)[1]
+    preprocess(new_mid_path, save_path)
     adjust_chord(new_mid_path, '/root/temporary/' + filename + '_all_adjusted.mid')
     return '/root/temporary/' + filename + '_all_adjusted.mid'
 

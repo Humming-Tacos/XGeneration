@@ -1,5 +1,4 @@
 import torch
-
 print(torch.cuda.is_available())
 from .task1_explicit.inference import inference
 from .task2_explicit.harmonizer import generate_chord

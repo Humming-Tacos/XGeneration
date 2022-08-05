@@ -46,6 +46,79 @@ hold_state = 128
 rest_state = 129
 
 
+
+
+def clamp_midi_data(input_midi_data):
+    tempo = input_midi_data.get_tempo_changes()[1][0]
+
+    original_end_time = input_midi_data.instruments[0].notes[-1].end
+    # end_time -> beats
+    original_end_beat = (original_end_time / 60) * tempo
+
+    end_time = math.ceil((60 / tempo) * original_end_beat / 2) * 2
+    # end_time = input_midi_data.tick_to_time(last_tick)
+    # extends first and last note to the end
+    input_midi_data.instruments[0].notes[0].start = 0
+    input_midi_data.instruments[0].notes[-1].end = end_time
+
+
+def quantize_midi_data(input_midi_data: pretty_midi.PrettyMIDI):
+    tempo = input_midi_data.get_tempo_changes()[1][0]
+
+    def quantize(time):
+
+        beat = round((time / 60) * tempo * 8) / 8
+
+        new_time = ((beat / tempo) * 60)
+
+        return new_time
+
+    delete_notes_index = []
+
+    for track_id in range(len(input_midi_data.instruments)):
+        for i, note in enumerate(input_midi_data.instruments[track_id].notes):
+            note.start = quantize(note.start)
+            note.end = quantize(note.end)
+            if i != 0:
+                if note.start == input_midi_data.instruments[track_id].notes[i - 1].start:
+                    # choose longest => choose last end
+                    if note.end > input_midi_data.instruments[track_id].notes[i - 1].end:
+                        delete_notes_index.append(i - 1)
+                    else:
+                        delete_notes_index.append(i)
+                elif input_midi_data.instruments[track_id].notes[i - 1].start <= note.start < \
+                        input_midi_data.instruments[track_id].notes[i - 1].end:
+                    input_midi_data.instruments[track_id].notes[i - 1].end = note.start
+
+        input_midi_data.instruments[track_id].notes = [
+            note for i, note in enumerate(input_midi_data.instruments[track_id].notes) if i not in delete_notes_index
+        ]
+
+
+def _print_notes(input_midi_data):
+    for note in input_midi_data.instruments[0].notes:
+        print(note)
+
+
+def preprocess(input_midi_path):
+    input_midi_data = pretty_midi.PrettyMIDI(input_midi_path)
+    clamp_midi_data(input_midi_data)
+    quantize_midi_data(input_midi_data)
+    output_midi_path = input_midi_path
+    break_note(input_midi_data)
+    _print_notes(input_midi_data)
+    input_midi_data.write(output_midi_path)
+    return output_midi_path
+
+
+def break_note(input_midi_data):
+    for note in input_midi_data.instruments[0].notes:
+        if note.end - note.start > 0.75:
+            note.end = note.start + 0.75
+            input_midi_data.instruments[0].notes.append(pretty_midi.Note(
+                velocity=note.velocity, pitch=note.pitch, start=note.start+0.75, end=note.end))
+
+
 def process_note_time(input_midi_path):
     input_midi_data = pretty_midi.PrettyMIDI(input_midi_path)
     tempo = int(input_midi_data.get_tempo_changes()[1])
@@ -74,69 +147,6 @@ def extract_rhythm(x, hold_token=2, rest_token=3):
         else:
             d.append(rest_token)
     return np.array(d)
-
-
-def clamp_midi_data(input_midi_data):
-    tempo = input_midi_data.get_tempo_changes()[1][0]
-
-    original_end_time = input_midi_data.instruments[0].notes[-1].end
-    # end_time -> beats
-    original_end_beat = (original_end_time / 60) * tempo
-
-    end_time = math.ceil((60 / tempo) * original_end_beat / 2) * 2
-    # end_time = input_midi_data.tick_to_time(last_tick)
-    # extends first and last note to the end
-    input_midi_data.instruments[0].notes[0].start = 0
-    input_midi_data.instruments[0].notes[-1].end = end_time
-
-
-def quantize_midi_data(input_midi_data: pretty_midi.PrettyMIDI):
-    starts = input_midi_data.get_onsets()
-    tempo = input_midi_data.get_tempo_changes()[1][0]
-
-    def quantize(time):
-
-        beat = round((time / 60) * tempo * 8) / 8
-
-        new_time = ((beat / tempo) * 60)
-
-        return new_time
-
-    # get ends:
-    ends = [note.end for note in input_midi_data.instruments[0].notes]
-    delete_notes_index = []
-
-    for i, note in enumerate(input_midi_data.instruments[0].notes):
-        note.start = quantize(note.start)
-        note.end = quantize(note.end)
-        if i != 0:
-            if note.start == input_midi_data.instruments[0].notes[i - 1].start:
-                # choose longest => choose last end
-                if note.end > input_midi_data.instruments[0].notes[i - 1].end:
-                    delete_notes_index.append(i - 1)
-                else:
-                    delete_notes_index.append(i)
-            elif note.start >= input_midi_data.instruments[0].notes[i - 1].start and note.start < \
-                    input_midi_data.instruments[0].notes[i - 1].end:
-                input_midi_data.instruments[0].notes[i - 1].end = note.start
-
-    input_midi_data.instruments[0].notes = [
-        note for i, note in enumerate(input_midi_data.instruments[0].notes) if i not in delete_notes_index
-    ]
-
-
-def _print_notes(input_midi_data):
-    for note in input_midi_data.instruments[0].notes:
-        print(note)
-
-
-def preprocess_midi(input_midi_path):
-    input_midi_data = pretty_midi.PrettyMIDI(input_midi_path)
-    clamp_midi_data(input_midi_data)
-    quantize_midi_data(input_midi_data)
-    output_midi_path = input_midi_path
-    input_midi_data.write(output_midi_path)
-    return output_midi_path
 
 
 def processed_data_tensor(data):
@@ -386,11 +396,24 @@ def change_tempo(midi):
             msg.tempo = 750000
 
 
+def to_piano(input_midi_path, output_midi_path):
+    mid = pretty_midi.PrettyMIDI(input_midi_path)
+    tempo = int(mid.get_tempo_changes()[1])
+    new_mid = pretty_midi.PrettyMIDI(initial_tempo=tempo)
+    piano = pretty_midi.Instrument(program=0)
+
+    for note in mid.instruments[0].notes:
+        piano.notes.append(note)
+
+    new_mid.instruments.append(piano)
+    new_mid.write(output_midi_path)
+    return output_midi_path
+
+
 def inference(midi_path):
     print(torch.cuda.is_available())
     res = []
-    # quantize midi first
-    midi_path = preprocess_midi(midi_path)
+    midi_path = preprocess(midi_path)
     change_tempo(midi_path)
     process_note_time(midi_path)
     min_step = 1 / 12
@@ -438,6 +461,8 @@ def inference(midi_path):
     output_path = "/root/temporary/inpaint_" + time + ".mid"
     m.data2midi(data, output=output_path)
 
+    new_path = to_piano(midi_path, os.path.split(midi_path)[0] + '/extracted_' + os.path.split(midi_path)[1])
+
     msg_list = []
     # inpaint length: 8 bars
     new_mid = MidiFile(output_path)
@@ -445,7 +470,7 @@ def inference(midi_path):
         if not msg.is_meta:
             msg_list.append(msg)
     # original length: 4 bars before
-    original_mid = MidiFile(midi_path)
+    original_mid = MidiFile(new_path)
     for msg in original_mid.tracks[1]:
         if not msg.is_meta:
             msg_list.append(msg)
