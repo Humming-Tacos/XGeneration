@@ -15,9 +15,6 @@ class MIDI_Loader:
 
     def load(self, directory):
         path = os.listdir(directory)
-        print("Dataset Name: " + self.datasetName)
-        print("start to load mid from %s" % directory)
-        # Nottingham dataset is processed by y
         self.midi_files = []
         self.directory = directory
         total = 0
@@ -46,20 +43,17 @@ class MIDI_Loader:
         return None
 
     def load_single_midi(self, midi_file):
-        print("Dataset Name: " + self.datasetName)
-        print("start to load mid from %s" % midi_file)
+        # print("Dataset Name: " + self.datasetName)
+        # print("start to load mid from %s" % midi_file)
         self.midi_files = []
-        if self.datasetName == "Irish":
-            if not midi_file.endswith(".mid"):
-                print("not a midi file")
-            temp = pyd.PrettyMIDI(midi_file)
-            # useless midi file
-            if len(temp.instruments) == 0 or len(temp.instruments[0].notes) == 0:
-                print("useless midi file")
-            tsc = temp.time_signature_changes
+        temp = pyd.PrettyMIDI(midi_file)
+        # useless midi file
+        if len(temp.instruments) == 0 or len(temp.instruments[0].notes) == 0:
+            print("useless midi file")
+            exit()
+        tsc = temp.time_signature_changes
+        if len(tsc) == 1 and tsc[0].numerator == 4 and tsc[0].denominator == 4:
             self.midi_files.append({"name": (midi_file.split("."))[0], "raw": temp})
-            # if len(tsc) == 1 and tsc[0].numerator == 4 and tsc[0].denominator == 4:
-            #     self.midi_files.append({"name": (midi_file.split("."))[0], "raw": temp})
         return None
 
     def getChordSeq(self, recogLevel="Mm"):
@@ -68,7 +62,7 @@ class MIDI_Loader:
         if self.datasetName == "Nottingham":
             # 25 one hot vectors
             # 0-11 for major
-            # 12-23 for minor 
+            # 12-23 for minor
             # 24 for NC
             for i in range(len(self.midi_files)):
                 midi_data = self.midi_files[i]["raw"]
@@ -122,105 +116,49 @@ class MIDI_Loader:
         return None
 
     def getNoteSeq(self):
-        print("start to get notes")
-        if self.datasetName == "Nottingham":
-            # 130 one hot vectors 
-            # 0-127 for pitch
-            # 128 for hold 129 for rest
-            rest_pitch = 129
-            hold_pitch = 128
-            for i in range(len(self.midi_files)):
-                midi_data = self.midi_files[i]["raw"]
-                pitch_file = []
-                cst = 0.0
-                cet = midi_data.instruments[0].notes[0].start
-                cpitch = rest_pitch
-                flag = False
-                for note in midi_data.instruments[0].notes:
+        # 130 one hot vectors
+        # 0-127 for pitch
+        # 128 for hold 129 for rest
+        rest_pitch = 129
+        hold_pitch = 128
+        c_bias = 1.0 / 960
+        for i in range(len(self.midi_files)):
+            midi_data = self.midi_files[i]["raw"]
+            pitch_file = []
+            cst = midi_data.instruments[0].notes[0].start - c_bias
+            # first note starts > 0
+            if cst > 0:
+                steps = int(round(cst / self.min_step))
+                pitch_file.extend([rest_pitch] * steps)
+            cst = 0.0
+            cet = midi_data.instruments[0].notes[0].start - c_bias
+            cpitch = rest_pitch
+            flag = False
+            for note in midi_data.instruments[0].notes:
+                # print(abs(note.start - c_bias - cet))
+                if note.start - cet - c_bias >= -0.0001:
+                    den_step = int(round((note.start - cet - c_bias) / self.min_step))
+                    pitch_file.extend([rest_pitch] * den_step)
+                    cst = note.start - c_bias
+                    cet = note.end
+                    add_pitch = note.pitch
+                    steps = int(round((cet - cst) / self.min_step))
+                    if steps > 0:
+                        pitch_file.extend([add_pitch])
+                        pitch_file.extend([hold_pitch] * (steps - 1))
+                elif note.start - c_bias <= cst:
+                    if not flag:
+                        print("find ahead notes in Irish Folk Song dataset in %s" % (self.midi_files[i]["name"]))
                     flag = True
-                    if note.start > cst:
-                        flag = False
-                        if note.start > cet:
-                            steps = int((cet - cst) / self.minStep)
-                            pitch_file.append(cpitch)
-                            add_pitch = rest_pitch if (cpitch == rest_pitch) else hold_pitch
-                            for j in range(steps - 1):
-                                pitch_file.append(add_pitch)
-                            steps = int((note.start - cet) / self.minStep)
-                            pitch_file.append(rest_pitch)
-                            for j in range(steps - 1):
-                                pitch_file.append(rest_pitch)
-                        else:
-                            steps = int((note.start - cst) / self.minStep)
-                            pitch_file.append(cpitch)
-                            add_pitch = rest_pitch if (cpitch == rest_pitch) else hold_pitch
-                            for j in range(steps - 1):
-                                pitch_file.append(add_pitch)
-                        cst = note.start
-                        cet = note.end
-                        cpitch = note.pitch
-                if flag == False:
-                    steps = int((cet - cst) / self.minStep)
-                    pitch_file.append(cpitch)
-                    add_pitch = rest_pitch if (cpitch == rest_pitch) else hold_pitch
-                    for j in range(steps - 1):
-                        pitch_file.append(add_pitch)
-                self.midi_files[i]["notes"] = pitch_file[:]
-            print("calc notes success! %d files in total" % len(self.midi_files))
-            return self.midi_files
-        if self.datasetName == "Irish":
-            # 130 one hot vectors 
-            # 0-127 for pitch
-            # 128 for hold 129 for rest
-            rest_pitch = 129
-            hold_pitch = 128
-            # c_bias = 1.0 / 960
-            c_bias = 0
-            print("length")
-            print(len(self.midi_files))
-            for i in range(len(self.midi_files)):
-                midi_data = self.midi_files[i]["raw"]
-                pitch_file = []
-                cst = midi_data.instruments[0].notes[0].start - c_bias
-                # first note starts > 0
-                if cst > 0:
-                    steps = int(round(cst / self.min_step))
-                    pitch_file.extend([rest_pitch] * steps)
-                cst = 0.0
-                cet = midi_data.instruments[0].notes[0].start - c_bias
-                cpitch = rest_pitch
-                flag = False
-                for note in midi_data.instruments[0].notes:
-                    # print(abs(note.start - c_bias - cet))
-                    if note.start - cet - c_bias >= -0.0001:
-                        den_step = int(round((note.start - cet - c_bias) / self.min_step))
-                        pitch_file.extend([rest_pitch] * den_step)
-                        cst = note.start - c_bias
-                        cet = note.end
-                        add_pitch = note.pitch
-                        steps = int(round((cet - cst) / self.min_step))
-                        if steps > 0:
-                            pitch_file.extend([add_pitch])
-                            pitch_file.extend([hold_pitch] * (steps - 1))
-                    elif note.start - c_bias <= cst:
-                        if not flag:
-                            print("find ahead notes in Irish Folk Song dataset in %s" % (self.midi_files[i]["name"]))
-                        flag = True
-                        continue
-                self.midi_files[i]["notes"] = pitch_file[:]
-                if i % 1000 == 0:
-                    print("get notes in %d files" % (i + 1))
-            print("calc notes success! %d files in total" % len(self.midi_files))
-            return self.midi_files
-        print("Error: No dataset called " + self.datasetName)
-        return False
+                    continue
+            self.midi_files[i]["notes"] = pitch_file[:]
+        return self.midi_files
 
     def getChordFunctions(self):
         return True
 
     def dataAugment(self, bottom=40, top=85):
         print("start to augment data")
-        # print("Be sure you get the chord functions before!")
         augment_data = []
         if self.datasetName == "Nottingham":
             cl = Chord_Loader(recogLevel=self.recogLevel)
@@ -251,11 +189,10 @@ class MIDI_Loader:
         return self.midi_files
 
     def processed_all(self):
-        if self.datasetName == "Irish":
-            print("start process Irish Folk Song dataset")
-            self.getNoteSeq()
-            print("processing succeed")
-            return self.midi_files
+        # print("start process Irish Folk Song dataset")
+        self.getNoteSeq()
+        # print("processing succeed")
+        return self.midi_files
 
     def writeFile(self, output=""):
         print("begin write file from %s" % self.directory)
@@ -284,12 +221,12 @@ class MIDI_Render:
         self.datasetName = datasetName
         self.minStep = minStep
 
-    def data2midi(self, data, recogLevel="Mm", output="task2_explicit.mid"):
+    def data2midi(self, data, recogLevel="Mm", output="test.mid"):
         gen_midi = pyd.PrettyMIDI()
         melodies = pyd.Instrument(program=pyd.instrument_name_to_program('Acoustic Grand Piano'))
         chords = pyd.Instrument(program=pyd.instrument_name_to_program('Acoustic Grand Piano'))
         if self.datasetName == "Nottingham":
-            # 130 one hot vectors 
+            # 130 one hot vectors
             # 0-127 for pitch
             # 128 for hold 129 for rest
             rest_pitch = 129
@@ -356,7 +293,7 @@ class MIDI_Render:
             gen_midi.write(output)
             print("finish render midi on " + output)
         if self.datasetName == "Irish":
-            # 130 one hot vectors 
+            # 130 one hot vectors
             # 0-127 for pitch
             # 128 for hold 129 for rest
             rest_pitch = 129
@@ -392,12 +329,12 @@ class MIDI_Render:
             gen_midi.write(output)
             print("finish render midi on " + output)
 
-    def text2midi(self, text_ad, recogLevel="Mm", output="task2_explicit.mid"):
+    def text2midi(self, text_ad, recogLevel="Mm", output="test.mid"):
         gen_midi = pyd.PrettyMIDI()
         melodies = pyd.Instrument(program=pyd.instrument_name_to_program('Acoustic Grand Piano'))
         chords = pyd.Instrument(program=pyd.instrument_name_to_program('Acoustic Grand Piano'))
         if self.datasetName == "Nottingham":
-            # 130 one hot vectors 
+            # 130 one hot vectors
             # 0-127 for pitch
             # 128 for hold 129 for rest
             rest_pitch = 129
@@ -526,7 +463,7 @@ class DataLoader:
             if i % 1000 == 0:
                 print("processed: %d\tdivision: %d" % (i, len(self.validate_set)))
             i = i + 1
-        print("begin processing task2_explicit:")
+        print("begin processing test:")
         i = 0
         for d in self.test:
             d = np.array(d["notes"])

@@ -46,8 +46,6 @@ hold_state = 128
 rest_state = 129
 
 
-
-
 def clamp_midi_data(input_midi_data):
     tempo = input_midi_data.get_tempo_changes()[1][0]
 
@@ -65,9 +63,9 @@ def clamp_midi_data(input_midi_data):
 def quantize_midi_data(input_midi_data: pretty_midi.PrettyMIDI):
     tempo = input_midi_data.get_tempo_changes()[1][0]
 
-    def quantize(time):
+    def quantize(input_time):
 
-        beat = round((time / 60) * tempo * 8) / 8
+        beat = round((input_time / 60) * tempo * 8) / 8
 
         new_time = ((beat / tempo) * 60)
 
@@ -95,19 +93,22 @@ def quantize_midi_data(input_midi_data: pretty_midi.PrettyMIDI):
         ]
 
 
-def _print_notes(input_midi_data):
-    for note in input_midi_data.instruments[0].notes:
-        print(note)
-
-
 def preprocess(input_midi_path):
-    input_midi_data = pretty_midi.PrettyMIDI(input_midi_path)
+    input_midi_data = pretty_midi.PrettyMIDI(input_midi_path, initial_tempo=80)
     clamp_midi_data(input_midi_data)
     quantize_midi_data(input_midi_data)
-    output_midi_path = input_midi_path
     break_note(input_midi_data)
-    _print_notes(input_midi_data)
+    output_midi_path = os.path.split(input_midi_path)[0] + '/preprocessed_' + os.path.split(input_midi_path)[1]
     input_midi_data.write(output_midi_path)
+
+    new_mid = pretty_midi.PrettyMIDI()
+    piano = pretty_midi.Instrument(program=0)
+
+    for note in input_midi_data.instruments[0].notes:
+        piano.notes.append(note)
+
+    new_mid.instruments.append(piano)
+    new_mid.write(output_midi_path)
     return output_midi_path
 
 
@@ -116,7 +117,7 @@ def break_note(input_midi_data):
         if note.end - note.start > 0.75:
             note.end = note.start + 0.75
             input_midi_data.instruments[0].notes.append(pretty_midi.Note(
-                velocity=note.velocity, pitch=note.pitch, start=note.start+0.75, end=note.end))
+                velocity=note.velocity, pitch=note.pitch, start=note.start + 0.75, end=note.end))
 
 
 def process_note_time(input_midi_path):
@@ -150,7 +151,7 @@ def extract_rhythm(x, hold_token=2, rest_token=3):
 
 
 def processed_data_tensor(data):
-    print("processed data:")
+    # print("processed data:")
     gd = []
     px = []
     rx = []
@@ -192,8 +193,8 @@ def processed_data_tensor(data):
     rx = torch.from_numpy(rx).float()
     len_x = torch.from_numpy(len_x).long()
     nrx = torch.from_numpy(nrx).float()
-    print("processed finish! zeros:", total)
-    print(gd.size(), px.size(), rx.size(), len_x.size(), nrx.size())
+    # print("processed finish! zeros:", total)
+    # print(gd.size(), px.size(), rx.size(), len_x.size(), nrx.size())
     return TensorDataset(px, rx, len_x, nrx, gd)
 
 
@@ -248,8 +249,8 @@ def preprocessing(data, measure_len):
             s = extract_rhythm(sd)
             data.append([sd, q, s, k])
         new_data.append(data)
-        if i % 1000 == 0:
-            print("processed:", i)
+        # if i % 1000 == 0:
+        #     print("processed:", i)
     # extract each measure in each song
     length = int(len(new_data[0]) / measure_len)
     res = []
@@ -286,12 +287,12 @@ def load_vae():
     vae_model.load_state_dict(dic)
 
     if torch.cuda.is_available():
-        print('Using: ', torch.cuda.get_device_name(torch.cuda.current_device()))
+        # print('Using: ', torch.cuda.get_device_name(torch.cuda.current_device()))
         vae_model.cuda()
     else:
         print('Using: CPU')
     vae_model.eval()
-    print(vae_model.training)
+    # print(vae_model.training)
     return vae_model
 
 
@@ -311,7 +312,7 @@ def load_model_a4(vae_model, inpaint_len, total_len):
     model.set_stage("sketch")
 
     if torch.cuda.is_available():
-        print('Using: ', torch.cuda.get_device_name(torch.cuda.current_device()))
+        # print('Using: ', torch.cuda.get_device_name(torch.cuda.current_device()))
         model.cuda()
     else:
         print('Using: CPU')
@@ -334,7 +335,7 @@ def load_model_b4(vae_model, inpaint_len, total_len):
     model.set_stage("sketch")
 
     if torch.cuda.is_available():
-        print('Using: ', torch.cuda.get_device_name(torch.cuda.current_device()))
+        # print('Using: ', torch.cuda.get_device_name(torch.cuda.current_device()))
         model.cuda()
     else:
         print('Using: CPU')
@@ -389,32 +390,9 @@ def append_notes(output, section, res):
                 res.append(ccc)
 
 
-def change_tempo(midi):
-    mid = mido.MidiFile(midi)
-    for msg in mid.tracks[0]:
-        if msg.type == 'set_tempo':
-            msg.tempo = 750000
-
-
-def to_piano(input_midi_path, output_midi_path):
-    mid = pretty_midi.PrettyMIDI(input_midi_path)
-    tempo = int(mid.get_tempo_changes()[1])
-    new_mid = pretty_midi.PrettyMIDI(initial_tempo=tempo)
-    piano = pretty_midi.Instrument(program=0)
-
-    for note in mid.instruments[0].notes:
-        piano.notes.append(note)
-
-    new_mid.instruments.append(piano)
-    new_mid.write(output_midi_path)
-    return output_midi_path
-
-
 def inference(midi_path):
-    print(torch.cuda.is_available())
     res = []
     midi_path = preprocess(midi_path)
-    change_tempo(midi_path)
     process_note_time(midi_path)
     min_step = 1 / 12
 
@@ -437,6 +415,7 @@ def inference(midi_path):
     except IndexError:
         print("Piece too short! Try to include more notes!")
         exit()
+
     output_a4 = model_eval(model_a4, inference_data[0], n_past=1, n_future=3, n_inpaint=2)
     append_notes(output_a4, "past", res)
     append_notes(output_a4, "inpaint", res)
@@ -457,11 +436,9 @@ def inference(midi_path):
     # render midi
     data = {'notes': res}
     m = MIDI_Render("Irish", minStep=min_step)
-    time = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_path = "/root/temporary/inpaint_" + time + ".mid"
+    t = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_path = "/root/temporary/inpaint_" + datetime.datetime.now().strftime("%Y%m%d_%H%M%S") + ".mid"
     m.data2midi(data, output=output_path)
-
-    new_path = to_piano(midi_path, os.path.split(midi_path)[0] + '/extracted_' + os.path.split(midi_path)[1])
 
     msg_list = []
     # inpaint length: 8 bars
@@ -470,15 +447,16 @@ def inference(midi_path):
         if not msg.is_meta:
             msg_list.append(msg)
     # original length: 4 bars before
-    original_mid = MidiFile(new_path)
+    original_mid = MidiFile(midi_path)
     for msg in original_mid.tracks[1]:
         if not msg.is_meta:
             msg_list.append(msg)
     # combined length: 16 bars in total
     for msg in msg_list[:-2]:
         original_mid.tracks[1].append(msg)
-    original_mid.save("/root/temporary/demo_" + time + ".mid")
-    return "/root/temporary/demo_" + time + ".mid"
+    original_mid.save("/root/temporary/demo_" + t + ".mid")
+
+    return "/root/temporary/demo_" + t + ".mid"
 
 
 if __name__ == '__main__':
