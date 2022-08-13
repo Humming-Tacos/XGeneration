@@ -19,7 +19,7 @@ Generate simple chord for the melody from task1, output lead sheet (melody + cho
 
 ### Task3: Accompaniment Generation
 
-Generate Chinese pop style piano accompaniment based on given lead sheet.
+Generate Chinese pop style piano accompaniment based on the given lead sheet.
 
 Download the pretrained model [here](https://drive.google.com/file/d/1HUkbbk9qkvDocYWmdK5Zq6vUkcKympGW/view?usp=sharing).
 
