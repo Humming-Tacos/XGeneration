@@ -11,7 +11,7 @@ The XGeneration pipeline is as follows:
 
 Given a 4-bar phrase, generate AABA-structured melody.
 
-Download the pretrained model [here](https://drive.google.com/file/d/1rKqBCrkfhDTt0B1nw7mDndJ7RpMNKAk5/view?usp=sharing).
+Download the pretrained model [here](https://drive.google.com/file/d/1AvtSdcs-14TWZAKlPvivMzQZou3_vUZe/view?usp=sharing).
 
 ### Task2: Chord Generation
 
